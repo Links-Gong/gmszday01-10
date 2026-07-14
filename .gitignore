@@ -1,0 +1,11 @@
+# Python environments and caches
+**/.venv/
+**/__pycache__/
+*.py[cod]
+
+# Local Streamlit credentials and runtime logs
+**/.streamlit/secrets.toml
+*.log
+
+# Regenerable export exceeds GitHub's 100 MB per-file limit
+dm/results/dm_enterprise_sales_rank_2026_gj_*.csv
