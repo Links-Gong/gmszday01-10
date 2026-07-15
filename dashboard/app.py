@@ -31,6 +31,13 @@ st.markdown(
         min-height: 112px;
     }
     [data-testid="stMetricLabel"] { color: var(--muted); }
+    [data-testid="stMetricValue"] {
+        font-size: 1.7rem;
+        line-height: 1.2;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    [data-testid="stMetricDelta"] { white-space: normal; }
     [data-testid="stSidebar"] { border-right: 1px solid #e4e7ec; }
     h1, h2, h3 { letter-spacing: 0; }
     </style>
@@ -44,6 +51,13 @@ PLATFORM_LABELS = {
     "Amazon": "亚马逊美国",
     "Alibaba": "阿里巴巴国际站",
     "Ozon": "Ozon",
+}
+
+PLATFORM_IDS = {
+    "SMT": 1,
+    "Amazon": 2,
+    "Alibaba": 3,
+    "Ozon": 4,
 }
 
 PROVINCE_COORDS = {
@@ -78,6 +92,68 @@ PROVINCE_COORDS = {
     "青海省": (36.6171, 101.7782),
     "宁夏回族自治区": (38.4872, 106.2309),
     "新疆维吾尔自治区": (43.8256, 87.6168),
+    "台湾省": (23.6978, 120.9605),
+    "香港特别行政区": (22.3193, 114.1694),
+    "澳门特别行政区": (22.1987, 113.5439),
+}
+
+PROVINCE_ALIASES = {
+    "北京市": ("北京", "北京市"),
+    "天津市": ("天津", "天津市"),
+    "河北省": ("河北", "河北省"),
+    "山西省": ("山西", "山西省"),
+    "内蒙古自治区": ("内蒙古", "内蒙古自治区"),
+    "辽宁省": ("辽宁", "辽宁省"),
+    "吉林省": ("吉林", "吉林省"),
+    "黑龙江省": ("黑龙江", "黑龙江省"),
+    "上海市": ("上海", "上海市"),
+    "江苏省": ("江苏", "江苏省"),
+    "浙江省": ("浙江", "浙江省"),
+    "安徽省": ("安徽", "安徽省"),
+    "福建省": ("福建", "福建省"),
+    "江西省": ("江西", "江西省"),
+    "山东省": ("山东", "山东省"),
+    "河南省": ("河南", "河南省"),
+    "湖北省": ("湖北", "湖北省"),
+    "湖南省": ("湖南", "湖南省"),
+    "广东省": ("广东", "广东省"),
+    "广西壮族自治区": ("广西", "广西壮族自治区"),
+    "海南省": ("海南", "海南省"),
+    "重庆市": ("重庆", "重庆市"),
+    "四川省": ("四川", "四川省"),
+    "贵州省": ("贵州", "贵州省"),
+    "云南省": ("云南", "云南省"),
+    "西藏自治区": ("西藏", "西藏自治区"),
+    "陕西省": ("陕西", "陕西省"),
+    "甘肃省": ("甘肃", "甘肃省"),
+    "青海省": ("青海", "青海省"),
+    "宁夏回族自治区": ("宁夏", "宁夏回族自治区"),
+    "新疆维吾尔自治区": ("新疆", "新疆维吾尔自治区"),
+    "台湾省": ("台湾", "台湾省"),
+    "香港特别行政区": ("香港", "香港特别行政区"),
+    "澳门特别行政区": ("澳门", "澳门特别行政区"),
+}
+
+PROVINCE_LOOKUP = {
+    alias: canonical
+    for canonical, aliases in PROVINCE_ALIASES.items()
+    for alias in aliases
+}
+
+INVALID_REGION_VALUES = {
+    "",
+    "-",
+    "--",
+    "NULL",
+    "N/A",
+    "NA",
+    "NAN",
+    "NONE",
+    "全国合计",
+    "未知省份",
+    "全部城市",
+    "全省小计",
+    "未知城市",
 }
 
 
@@ -157,6 +233,68 @@ def add_in_filter(
         placeholders.append(f":{key}")
         params[key] = value
     return f"AND {column} IN ({', '.join(placeholders)})"
+
+
+def clean_region_value(value: Any) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    cleaned = str(value).strip()
+    if cleaned.upper() in INVALID_REGION_VALUES:
+        return None
+    return cleaned
+
+
+def build_province_groups(values: list[Any]) -> dict[str, list[str]]:
+    groups: dict[str, set[str]] = {}
+    for value in values:
+        cleaned = clean_region_value(value)
+        canonical = PROVINCE_LOOKUP.get(cleaned or "")
+        if canonical:
+            groups.setdefault(canonical, set()).add(cleaned)
+    return {
+        canonical: sorted(aliases)
+        for canonical, aliases in sorted(groups.items())
+    }
+
+
+def build_city_groups(values: list[Any]) -> dict[str, list[str]]:
+    cleaned_values = {
+        cleaned
+        for value in values
+        if (cleaned := clean_region_value(value)) is not None
+    }
+    groups: dict[str, set[str]] = {}
+    admin_suffixes = ("市", "州", "盟", "地区", "县", "区")
+    for city in cleaned_values:
+        base_city = city[:-1] if city.endswith("市") else city
+        if (
+            city.endswith("市")
+            and base_city in cleaned_values
+            and not base_city.endswith(admin_suffixes)
+        ):
+            canonical = city
+        elif not city.endswith(admin_suffixes) and f"{city}市" in cleaned_values:
+            canonical = f"{city}市"
+        else:
+            canonical = city
+
+        malformed_suffix = canonical.endswith(("县市", "区市", "州市", "盟市", "地区市"))
+        if malformed_suffix or not canonical.endswith(admin_suffixes):
+            continue
+        groups.setdefault(canonical, set()).add(city)
+
+    return {
+        canonical: sorted(aliases)
+        for canonical, aliases in sorted(groups.items())
+    }
+
+
+def invert_region_groups(groups: dict[str, list[str]]) -> dict[str, str]:
+    return {
+        alias: canonical
+        for canonical, aliases in groups.items()
+        for alias in aliases
+    }
 
 
 def format_money(value: Any) -> str:
@@ -261,18 +399,20 @@ platform_filter = add_in_filter(
     "platform_name", selected_platforms, "platform", base_params
 )
 
-province_options = query_data(
+province_values = query_data(
     f"""
     SELECT DISTINCT province
     FROM {DWS_REGION_TABLE}
     WHERE month_id BETWEEN :start_month AND :end_month
       AND region_level = '省级'
       {platform_filter}
-      AND province NOT IN ('全国合计', '未知省份')
     ORDER BY province
     """,
     base_params,
 )["province"].tolist()
+province_groups = build_province_groups(province_values)
+province_options = list(province_groups)
+province_lookup = invert_region_groups(province_groups)
 
 with st.sidebar:
     selected_province = st.selectbox("省份", ["全部省份", *province_options])
@@ -280,10 +420,14 @@ with st.sidebar:
 city_params = dict(base_params)
 province_filter = ""
 if selected_province != "全部省份":
-    province_filter = "AND province = :selected_province"
-    city_params["selected_province"] = selected_province
+    province_filter = add_in_filter(
+        "province",
+        province_groups[selected_province],
+        "province",
+        city_params,
+    )
 
-city_options = query_data(
+city_values = query_data(
     f"""
     SELECT DISTINCT city
     FROM {DWS_REGION_TABLE}
@@ -291,11 +435,13 @@ city_options = query_data(
       AND region_level = '市级'
       {platform_filter}
       {province_filter}
-      AND city NOT IN ('全部城市', '全省小计', '未知城市')
     ORDER BY city
     """,
     city_params,
 )["city"].tolist()
+city_groups = build_city_groups(city_values)
+city_options = list(city_groups)
+city_lookup = invert_region_groups(city_groups)
 
 with st.sidebar:
     selected_city = st.selectbox("城市", ["全部城市", *city_options])
@@ -304,8 +450,12 @@ with st.sidebar:
 region_params = dict(city_params)
 city_filter = ""
 if selected_city != "全部城市":
-    city_filter = "AND city = :selected_city"
-    region_params["selected_city"] = selected_city
+    city_filter = add_in_filter(
+        "city",
+        city_groups[selected_city],
+        "city",
+        region_params,
+    )
 
 summary_params = dict(base_params)
 summary_params["end_month_only"] = int(end_month)
@@ -488,32 +638,31 @@ county = query_data(
     region_params,
 )
 if not county.empty:
+    county["province"] = county["province"].map(province_lookup).fillna("未知省份")
+    county["city"] = county["city"].map(city_lookup).fillna("未知城市")
+    county = (
+        county.groupby(["province", "city", "county"], as_index=False, dropna=False)
+        .agg(total_sales_rmb=("total_sales_rmb", "sum"), shop_count=("shop_count", "sum"))
+    )
     county["region"] = county[["province", "city", "county"]].agg(" / ".join, axis=1)
 
 enterprise_params = dict(base_params)
 enterprise_params["end_month_only"] = int(end_month)
+enterprise_platform_filter = add_in_filter(
+    "platform_id",
+    [PLATFORM_IDS[name] for name in selected_platforms],
+    "enterprise_platform",
+    enterprise_params,
+)
 enterprise = query_data(
     f"""
-    WITH combined AS (
-        SELECT company_name,
-               SUM(total_sales_rmb) AS total_sales_rmb,
-               SUM(total_sales_num) AS total_sales_num,
-               SUM(shop_count) AS shop_count
-        FROM {DM_ENTERPRISE_TABLE}
-        WHERE month_id = :end_month_only
-          {platform_filter}
-        GROUP BY company_name
-    ), ranked AS (
-        SELECT combined.*,
-               RANK() OVER (ORDER BY total_sales_rmb IS NULL,
-                                     total_sales_rmb DESC) AS enterprise_rank
-        FROM combined
-    )
-    SELECT enterprise_rank, company_name, total_sales_rmb,
+    SELECT platform_id, platform_name, enterprise_rank, company_name, total_sales_rmb,
            total_sales_num, shop_count
-    FROM ranked
-    WHERE enterprise_rank <= 20
-    ORDER BY enterprise_rank, company_name
+    FROM {DM_ENTERPRISE_TABLE}
+    WHERE month_id = :end_month_only
+      {enterprise_platform_filter}
+      AND enterprise_rank <= 20
+    ORDER BY platform_id, enterprise_rank, company_name
     """,
     enterprise_params,
 )
@@ -535,12 +684,13 @@ with left:
         st.plotly_chart(style_chart(county_figure, 460), width="stretch")
 
 with right:
-    st.subheader("企业销售排行")
+    st.subheader("企业销售排行（各平台 TOP20）")
     if enterprise.empty:
         st.info("所选范围没有有效企业销售额。")
     else:
         display_enterprise = enterprise.rename(
             columns={
+                "platform_name": "平台",
                 "enterprise_rank": "排名",
                 "company_name": "企业",
                 "total_sales_rmb": "销售额（元）",
@@ -548,6 +698,10 @@ with right:
                 "shop_count": "平台店铺数",
             }
         )
+        display_enterprise["平台"] = display_enterprise["平台"].map(
+            lambda value: PLATFORM_LABELS.get(value, value)
+        )
+        display_enterprise = display_enterprise.drop(columns=["platform_id"])
         st.dataframe(
             display_enterprise,
             width="stretch",
@@ -591,7 +745,10 @@ else:
             delta=delta,
             delta_color=delta_color,
         )
-    st.caption("同比：本版本未装载 2025 年同期，所有平台均为“无同期基期”，不显示 0%。")
+        if row["yoy_status"] == "CALCULATED" and not pd.isna(row["yoy_growth_pct"]):
+            card.caption(f"同比 {float(row['yoy_growth_pct']):.2f}%")
+        else:
+            card.caption("同比：无可用同期基期")
 
 map_params = dict(region_params)
 map_level = "市级" if selected_city != "全部城市" else "省级"
@@ -612,6 +769,12 @@ province_map = query_data(
     map_params,
 )
 if not province_map.empty:
+    province_map["province"] = province_map["province"].map(province_lookup)
+    province_map = (
+        province_map.dropna(subset=["province"])
+        .groupby("province", as_index=False)["total_sales_rmb"]
+        .sum()
+    )
     province_map["lat"] = province_map["province"].map(
         lambda value: PROVINCE_COORDS.get(value, (None, None))[0]
     )
@@ -641,4 +804,3 @@ else:
     st.plotly_chart(style_chart(map_figure, 520), width="stretch")
 
 st.caption("口径：快递收入=零售额×15%；快递量=销量×53%；地图坐标为省会近似位置。")
-

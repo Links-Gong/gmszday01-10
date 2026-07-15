@@ -15,3 +15,6 @@ yoy_status          = NO_BASELINE
 
 不能把缺少基期解释为同比 0%。
 
+2025平台月基期准备完成后，先运行 `sql/02_refresh_monthly_metrics.sql`，
+再运行 `sql/04_refresh_yoy_from_2025.sql`。同比按相同 `platform_id` 和
+`month_id - 100` 关联；缺失基期和0基期继续保留为 `NULL`。

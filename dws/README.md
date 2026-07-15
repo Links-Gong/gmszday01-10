@@ -9,3 +9,5 @@
 
 刷新脚本只删除 202601-202606，不影响同名表中范围外的数据。
 
+同比基期使用 `sql/05_create_refresh_platform_month_2025.sql`，从
+`dwd_sales_detail_2025_gj` 生成24行 `dws_platform_month_summary_2025_gj`。

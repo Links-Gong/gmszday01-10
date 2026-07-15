@@ -1,7 +1,7 @@
 SET NAMES utf8mb4;
 USE ec_cross_ceshi;
 
--- Must return 24 rows; formula differences must be zero.
+-- Must return 24 rows; express and calculated YoY differences must be zero.
 SELECT
     month_id,
     platform_id,
@@ -11,18 +11,30 @@ SELECT
     mom_growth_pct,
     last_year_sales_rmb,
     yoy_growth_pct,
-    yoy_status
+    yoy_status,
+    CASE WHEN yoy_status = 'CALCULATED'
+         THEN yoy_growth_pct - ROUND(
+             (retail_sales_rmb - last_year_sales_rmb)
+             / last_year_sales_rmb * 100,
+             4
+         )
+         ELSE NULL END AS yoy_difference
 FROM dm_monthly_business_metrics_2026_gj
 WHERE month_id BETWEEN 202601 AND 202606
 ORDER BY month_id, platform_id;
 
--- Must return zero rows: no 2025 baseline is loaded.
+-- Must return zero rows: status, baseline and YoY value must agree.
 SELECT *
 FROM dm_monthly_business_metrics_2026_gj
 WHERE month_id BETWEEN 202601 AND 202606
-  AND (last_year_sales_rmb IS NOT NULL
-       OR yoy_growth_pct IS NOT NULL
-       OR yoy_status <> 'NO_BASELINE');
+  AND (
+      (yoy_status = 'CALCULATED'
+       AND (last_year_sales_rmb IS NULL
+            OR last_year_sales_rmb = 0
+            OR yoy_growth_pct IS NULL))
+      OR
+      (yoy_status <> 'CALCULATED' AND yoy_growth_pct IS NOT NULL)
+  );
 
 -- Monthly DM must equal platform DWS.
 SELECT d.month_id, d.platform_id,
@@ -41,4 +53,3 @@ FROM dm_enterprise_sales_rank_2026_gj
 WHERE month_id BETWEEN 202601 AND 202606
 GROUP BY month_id, platform_id, company_name
 HAVING COUNT(*) > 1;
-

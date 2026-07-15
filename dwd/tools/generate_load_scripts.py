@@ -1,8 +1,14 @@
+import argparse
 from pathlib import Path
 
 
+YEAR = 2026
 MONTHS = range(202601, 202607)
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "sql" / "load"
+STAGE_TABLE = "stg_dwd_sales_detail_2026_gj"
+AUDIT_TABLE = "etl_load_audit_2026_gj"
+PROMOTE_PROCEDURE = "sp_promote_dwd_batch_2026_gj"
+DIM_STAGE_TABLE = "stg_dim_company_basic_2026_gj"
 PLACEHOLDERS = "('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE')"
 NUMERIC_PATTERN = "^([0-9]+([.][0-9]+)?|[.][0-9]+)$"
 
@@ -13,6 +19,27 @@ STAGE_COLUMNS = """(
     source_row_count, invalid_sales_num_count, invalid_sales_money_count,
     dim_match_flag
 )"""
+
+
+def configure(year: int, output_dir: Path | None = None) -> None:
+    global YEAR, MONTHS, OUTPUT_DIR, STAGE_TABLE, AUDIT_TABLE, PROMOTE_PROCEDURE
+
+    if year not in (2025, 2026):
+        raise ValueError("Only 2025 and 2026 are supported")
+
+    YEAR = year
+    MONTHS = range(year * 100 + 1, year * 100 + 7)
+    suffix = f"{year}_gj"
+    STAGE_TABLE = f"stg_dwd_sales_detail_{suffix}"
+    AUDIT_TABLE = f"etl_load_audit_{suffix}"
+    PROMOTE_PROCEDURE = f"sp_promote_dwd_batch_{suffix}"
+
+    if output_dir is not None:
+        OUTPUT_DIR = output_dir
+    elif year == 2026:
+        OUTPUT_DIR = Path(__file__).resolve().parents[1] / "sql" / "load"
+    else:
+        OUTPUT_DIR = Path(__file__).resolve().parents[1] / "sql" / f"load_{year}"
 
 
 def clean_text(expression: str, *, shop_id: bool = False) -> str:
@@ -92,7 +119,7 @@ SET @valid_shop_count = (
     WHERE {shop_condition}
 );
 
-INSERT INTO etl_load_audit_2026_gj (
+INSERT INTO {AUDIT_TABLE} (
     batch_key, month_id, platform_id, platform_name, source_table,
     source_row_count, empty_shop_id_count, valid_shop_count,
     staged_row_count, target_row_count, status, message,
@@ -117,7 +144,7 @@ ON DUPLICATE KEY UPDATE
     started_time = CURRENT_TIMESTAMP,
     completed_time = NULL;
 
-DELETE FROM stg_dwd_sales_detail_2026_gj
+DELETE FROM {STAGE_TABLE}
 WHERE month_id = {month} AND platform_id = {platform_id};
 """
 
@@ -125,28 +152,28 @@ WHERE month_id = {month} AND platform_id = {platform_id};
 def audit_postamble(month: int, platform_id: int) -> str:
     return f"""
 SET @staged_row_count = (
-    SELECT COUNT(*) FROM stg_dwd_sales_detail_2026_gj
+    SELECT COUNT(*) FROM {STAGE_TABLE}
     WHERE month_id = {month} AND platform_id = {platform_id}
 );
 SET @staged_sales_money_rmb = (
-    SELECT ROUND(SUM(sales_money), 2) FROM stg_dwd_sales_detail_2026_gj
+    SELECT ROUND(SUM(sales_money), 2) FROM {STAGE_TABLE}
     WHERE month_id = {month} AND platform_id = {platform_id}
 );
 
-UPDATE etl_load_audit_2026_gj
+UPDATE {AUDIT_TABLE}
 SET staged_row_count = @staged_row_count,
     staged_sales_money_rmb = @staged_sales_money_rmb,
     status = 'STAGED',
     message = 'Staging complete; validating before promotion'
 WHERE month_id = {month} AND platform_id = {platform_id};
 
-CALL sp_promote_dwd_batch_2026_gj({month}, {platform_id});
+CALL {PROMOTE_PROCEDURE}({month}, {platform_id});
 
 SELECT month_id, platform_id, platform_name, source_row_count,
        empty_shop_id_count, valid_shop_count, staged_row_count,
        target_row_count, staged_sales_money_rmb, target_sales_money_rmb,
        status, message, completed_time
-FROM etl_load_audit_2026_gj
+FROM {AUDIT_TABLE}
 WHERE month_id = {month} AND platform_id = {platform_id};
 """
 
@@ -178,7 +205,7 @@ def typed_ctes() -> str:
 def smt_sql(month: int) -> str:
     source = f"smt_shopinfo_{month}"
     body = f"""
-INSERT INTO stg_dwd_sales_detail_2026_gj {STAGE_COLUMNS}
+INSERT INTO {STAGE_TABLE} {STAGE_COLUMNS}
 WITH cleaned AS (
     SELECT
         {clean_text('s.shop_id', shop_id=True)} AS shop_id,
@@ -219,7 +246,7 @@ def aggregated_platform_sql(
     money_factor: str,
 ) -> str:
     body = f"""
-INSERT INTO stg_dwd_sales_detail_2026_gj {STAGE_COLUMNS}
+INSERT INTO {STAGE_TABLE} {STAGE_COLUMNS}
 WITH cleaned AS (
     SELECT DISTINCT
 {cleaned_select}
@@ -269,7 +296,7 @@ SELECT
     a.invalid_sales_money_count,
     CASE WHEN d.shop_id IS NULL THEN 0 ELSE 1 END
 FROM aggregated a
-LEFT JOIN stg_dim_company_basic_2026_gj d
+LEFT JOIN {DIM_STAGE_TABLE} d
   ON d.platform = '{dim_platform}'
  AND d.platform_id = {platform_id}
  AND d.shop_id = a.shop_id;
@@ -322,7 +349,7 @@ def alibaba_sql(month: int) -> str:
 def ozon_sql(month: int) -> str:
     source = f"ozon_shopinfo_{month}_cn"
     body = f"""
-INSERT INTO stg_dwd_sales_detail_2026_gj {STAGE_COLUMNS}
+INSERT INTO {STAGE_TABLE} {STAGE_COLUMNS}
 WITH cleaned AS (
     SELECT
         {clean_text('o.shop_id', shop_id=True)} AS shop_id,
@@ -408,7 +435,7 @@ SELECT
     a.invalid_sales_money_count,
     CASE WHEN d.shop_id IS NULL THEN 0 ELSE 1 END
 FROM aggregated a
-LEFT JOIN stg_dim_company_basic_2026_gj d
+LEFT JOIN {DIM_STAGE_TABLE} d
   ON d.platform = 'ozon'
  AND d.platform_id = 4
  AND d.shop_id = a.shop_id;
@@ -416,7 +443,28 @@ LEFT JOIN stg_dim_company_basic_2026_gj d
     return audit_preamble(month, 4, "Ozon", source) + body + audit_postamble(month, 4)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate six monthly DWD load scripts for four platforms."
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        choices=(2025, 2026),
+        default=2026,
+        help="Source year and target-table suffix (default: 2026).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Optional output directory. Defaults to sql/load for 2026 and sql/load_YEAR otherwise.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    configure(args.year, args.output_dir)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     generators = (
         (1, "smt", smt_sql),
@@ -435,7 +483,9 @@ def main() -> None:
         if old_file.name not in expected_files:
             old_file.unlink()
 
-    print(f"Generated {len(expected_files)} load scripts in {OUTPUT_DIR}")
+    print(
+        f"Generated {len(expected_files)} load scripts for {YEAR} in {OUTPUT_DIR}"
+    )
 
 
 if __name__ == "__main__":

@@ -12,15 +12,6 @@ month_id + platform_id + shop_id
 
 `sql/load` 中每个文件只处理一个月、一个平台。脚本先重建该批次的暂存数据，再调用 `sp_promote_dwd_batch_2026_gj` 校验并事务性提升。
 
-如果客户端超时，先查询：
-
-```sql
-SELECT *
-FROM ec_cross_ceshi.etl_load_audit_2026_gj
-ORDER BY month_id, platform_id;
-```
-
-状态为 `SUCCESS` 表示已完整提交；`RUNNING` 或 `FAILED` 只需要重跑对应批次。
 
 ## 混合编码处理
 
@@ -29,3 +20,14 @@ ORDER BY month_id, platform_id;
 ## 脚本维护
 
 24 个批次脚本由 `tools/generate_load_scripts.py` 生成。月份或模板变化时修改生成器，不要手工改其中一个月造成口径漂移。
+
+生成2025同比基期脚本：
+
+```powershell
+..\dashboard\.venv\Scripts\python.exe tools\generate_load_scripts.py --year 2025
+```
+
+脚本输出到 `sql/load_2025`，写入独立的 `_2025_gj` 表。先运行
+`sql/03_create_2025_baseline_tables.sql`，再按月份、平台依次运行24个脚本。
+2025和2026共用 `stg_dim_company_basic_2026_gj`，因此维表暂存只需按
+`sql/02_refresh_dim_stage.sql` 刷新。
