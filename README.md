@@ -1,78 +1,125 @@
 # 2026 上半年跨境电商实训成果
 
-本目录是基于 202601-202606 的版本
+## 项目目标
 
-## 数据链路
+本项目把 SMT、Amazon、Alibaba、Ozon 四个平台的月度源表，逐层整理为可核对、可汇总、可计算业务指标并可在看板中展示的数据链路。
+
+主分析期为 `202601-202606`。`202501-202506` 只承担同比基期作用，不与 2026 数据混入同一张主结果表。
+
+## 全链路逻辑
 
 ```text
-ec_cross_border 月表
-        |
-        v
-ec_cross_ceshi.dwd_sales_detail_2026_gj
-        |
-        v
-DWS 平台 / 区域 / 类目汇总
-        |
-        v
-DM 月度指标 / 企业排行
-        |
-        v
-Streamlit 看板
-        |
-        v
+Day1 认表与字段对比
+        ↓ 确认四个平台各字段的业务含义
+Day2 数据质量摸底
+        ↓ 确定空值、重复值、异常数值和维表匹配规则
+Day3 DWD 标准化明细
+        ↓ 形成统一的“月 + 平台 + 店铺”数据
+Day4 DWS 主题汇总
+        ↓ 形成平台、区域、类目三种分析口径
+Day5-Day6 DM 业务指标
+        ↓ 形成月度 KPI、同比和企业排行
+Day7-Day8 Streamlit 看板
+        ↓ 把业务结果转成可筛选的分析页面
 Day9 全链路验证
+        ↓ 证明各层数据可回溯、公式一致、页面可用
+Day10 成果整理与提交
 ```
 
-## 固定口径
+每一层只在上一层完成并通过校验后开始。这样可以在发现问题时定位到具体层级，避免把源表问题、清洗问题和指标问题混在一起处理。
 
-- 月份：202601-202606。
-- 平台：SMT=1、Amazon=2、Alibaba=3、Ozon=4。
-- DWD 粒度：`month_id + platform_id + shop_id`，每店铺每月一行。
-- 销售额统一为人民币：SMT 和 Amazon 乘 7.2，Alibaba 乘 2.25，Ozon 原值。
-- 可选装载 202501-202506 作为同比基期；未装载或基期为0时，同比保持 SQL `NULL`。
-- 真实 0 保留；缺失值和非法数值不替换成 0。
+## 各阶段要完成什么
 
-## 执行顺序
+### 1. Day1：认识源表
 
-1. 运行 `ods/sql/01_preflight_source_tables.sql`。缺表、缺字段、字段漂移查询必须返回 0 行。
-2. 运行 `dwd/sql/01_create_tables.sql`。
-3. 运行 `dwd/sql/02_refresh_dim_stage.sql`。
-4. 按文件名顺序运行 `dwd/sql/load` 下 24 个批次脚本。一个脚本完成后再执行下一个。
-5. 运行 `dwd/sql/90_validate_dwd.sql` 和 `dwd/sql/91_validate_ozon_dedup.sql`。验证
-6. 依次运行 `dws/sql/01_create_tables.sql`、三个刷新脚本和验证脚本。
-7. 依次运行 `dm/sql/01_create_tables.sql`、两个刷新脚本和验证脚本。
-8. 按 `dashboard/README.md` 配置并启动看板。
-9. 运行 `validation/sql/01_day9_end_to_end_validation.sql`，并查看
-   `validation/README.md` 中的 Day9 验证结论。
+识别四个平台的表名规律、字段结构和同义字段，明确店铺、企业、地区、销量、销售额和类目分别来自哪里。
 
-### 可选：装载2025同比基期
+这一阶段的产出是字段对照和平台差异说明。它为 Day2 提供检查对象，也为 Day3 提供统一字段映射。
 
-1. 运行 `dwd/sql/03_create_2025_baseline_tables.sql`。
-2. 用 `dwd/tools/generate_load_scripts.py --year 2025` 生成脚本。
-3. 按文件名顺序运行 `dwd/sql/load_2025` 下24个批次脚本。
-4. 运行 `dwd/sql/92_validate_dwd_2025.sql`，确认24批全部成功。
-5. 运行 `dws/sql/05_create_refresh_platform_month_2025.sql`，确认返回24行。
-6. 重新运行 `dm/sql/02_refresh_monthly_metrics.sql`，再运行
-   `dm/sql/04_refresh_yoy_from_2025.sql` 和 `dm/sql/90_validate_dm.sql`。
+### 2. Day2：确认数据质量风险
 
-## 超时与重跑
+判断源数据中是否存在空店铺 ID、销售额或销量异常、真实 0、类目缺失、地区缺失、同店铺改名和维表无法匹配等情况。
 
-每个平台月份先写入 `stg_dwd_sales_detail_2026_gj`。只有暂存行数等于源表有效店铺数时，存储过程才会在事务中替换正式表对应批次。
+这一阶段不直接修改源表，而是把发现的问题转成 Day3 的清洗规则。只有风险和处理原则明确后，DWD 才不会在合并平台时误删、误补或重复计算数据。
 
-- 暂存阶段超时：正式 DWD 不受影响，直接重跑当前脚本。
-- 正式提升阶段报错：先在当前连接执行 `ROLLBACK;`，然后重跑当前脚本。
-- 不用 `TRUNCATE` 正式 DWD
+### 3. Day3：建立统一 DWD
 
-## 结果归档
+把 24 张 2026 月表转换为 `ec_cross_ceshi.dwd_sales_detail_2026_gj`。统一粒度为：
 
-每层 `results` 目录都有应导出的查询清单，并保留 SQL 文件名作为结果文件名前缀。
+```text
+month_id + platform_id + shop_id
+```
 
-## Day9 验证
+这一步完成字段统一、字符串与数值清洗、人民币换算、平台内去重、店铺级聚合、企业维表补充和批次审计。每个店铺在每个平台、每个月只保留一行。
 
-- 验证报告：`validation/README.md`
-- 统一只读 SQL：`validation/sql/01_day9_end_to_end_validation.sql`
-- PASS/FAIL 汇总：`validation/results/day9_validation_summary.csv`
-- 看板组件检查：`validation/results/06_dashboard_checks.csv`
+2025 同比基期使用相同规则生成 `dwd_sales_detail_2025_gj`。相同清洗口径保证后续同比比较的是同一业务定义。
 
-当前 2025/2026 DWD、DWS、DM 和同比对账均已通过。省市别名已在看板层统一，
-企业排行直接读取 DM 的每平台 TOP20，避免运行时扫描完整排行表。
+### 4. Day4：建立 DWS 主题汇总
+
+从 DWD 生成平台月、区域月和类目月三种汇总。DWS 的作用是把店铺级数据整理成稳定的分析主题，减少 DM 和看板重复扫描明细表。
+
+区域汇总使用 `region_level` 区分全国、省级、市级和区县级；类目汇总同时保留全部类目和 TOP10；平台汇总提供环比所需的上月金额。
+
+2025 只建立平台月汇总，用于支持 2026 同比，不扩展到区域和类目同比。
+
+### 5. Day5-Day6：形成 DM 业务结果
+
+DM 把 DWS 和 DWD 中的事实转成直接可展示的业务指标：
+
+- 月度零售额、销量和店铺数；
+- 快递收入估算和快递量估算；
+- 环比与同比；
+- 每月、每平台的企业销售排行。
+
+月度 KPI 主要来自平台月 DWS；企业排行需要企业和店铺明细，因此直接回到 DWD 聚合。DM 完成后，看板不再自行定义指标公式。
+
+### 6. Day7-Day8：建立看板
+
+看板读取 DWS 和 DM 的稳定结果，为月份、平台和地区提供交互式分析入口。月份使用单点滑块，滑块停在哪个月，全页就展示该月数据，不再把多个月份累加为区间结果。
+
+看板负责展示和筛选，不承担数据清洗，也不重新计算大规模企业排行。这样页面结果能够回溯到数据库结果表，并保持查询速度稳定。
+
+### 7. Day9：验证整条链路
+
+验证从原始行数到 DWD 店铺粒度的变化是否合理，DWS 是否与 DWD 对平，DM 公式是否正确，同比是否找到对应基期，以及看板组件是否能正常读取结果。
+
+Day9 不改变业务数据，只给出 PASS/FAIL 证据。所有关键检查通过后，成果才进入 Day10 整理和提交。
+
+## 固定业务口径
+
+| 项目 | 口径 |
+|---|---|
+| 平台编码 | SMT=1、Amazon=2、Alibaba=3、Ozon=4 |
+| 主分析期 | 202601-202606 |
+| 同比基期 | 202501-202506 |
+| DWD 粒度 | 每月、每平台、每店铺一行 |
+| 人民币换算 | SMT、Amazon ×7.2；Alibaba ×2.25；Ozon 原值 |
+| 缺失值 | 保留 `NULL`，不伪造为 0 |
+| 真实 0 | 保留并与缺失值分开统计 |
+| 环比 | 当前月与同平台上月比较 |
+| 同比 | 当前月与同平台上年同月比较；缺失或 0 基期返回 `NULL` |
+
+## 主要成果表
+
+| 层级 | 主要表 | 交给下一层的内容 |
+|---|---|---|
+| DWD | `dwd_sales_detail_2026_gj` | 统一店铺月明细 |
+| DWD 基期 | `dwd_sales_detail_2025_gj` | 同口径历史数据 |
+| DWS | `dws_platform_month_summary_2026_gj` | 平台月汇总和环比基础 |
+| DWS | `dws_region_month_summary_2026_gj` | 全国、省、市、区县汇总 |
+| DWS | `dws_category_month_summary_2026_gj` | 完整类目汇总 |
+| DWS | `dws_category_month_top10_2026_gj` | 类目月度排行 |
+| DWS 基期 | `dws_platform_month_summary_2025_gj` | 2025 平台月同比基期 |
+| DM | `dm_monthly_business_metrics_2026_gj` | 月度业务指标、环比和同比 |
+| DM | `dm_enterprise_sales_rank_2026_gj` | 每月、每平台企业排行 |
+
+## 文档入口
+
+- [ODS 说明](ods/README.md)：Day1-Day2 如何为清洗建立依据。
+- [DWD 说明](dwd/README.md)：四平台数据如何形成统一店铺月明细。
+- [DWS 说明](dws/README.md)：明细如何转换为主题汇总。
+- [DM 说明](dm/README.md)：汇总如何转换为业务指标和排行。
+- [看板说明](dashboard/README.md)：结果表如何进入交互页面。
+- [Day9 验证报告](validation/README.md)：全链路是否达到可交付标准。
+
+每层的 `results/README.md` 说明该层应保留哪些结果证据，以及这些证据证明了什么。
