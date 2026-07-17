@@ -127,6 +127,16 @@ WITH checks AS (
     ) duplicate_shop
 
     UNION ALL
+    SELECT 'DWD-08', 'DWD', 'Ozon observed categories populated', 0,
+           COUNT(*), COUNT(*), CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'Ozon category_name comes from source category_name_new'
+    FROM dwd_sales_detail_2026_gj
+    WHERE month_id BETWEEN 202601 AND 202606
+      AND platform_id = 4
+      AND sales_money IS NOT NULL
+      AND (category_name IS NULL OR TRIM(category_name) = '')
+
+    UNION ALL
     SELECT 'DWS-01', 'DWS', '2025 platform-month rows', 24, COUNT(*), COUNT(*) - 24,
            CASE WHEN COUNT(*) = 24 THEN 'PASS' ELSE 'FAIL' END,
            'Baseline summary has six months and four platforms'
@@ -241,6 +251,72 @@ WITH checks AS (
         WHERE month_id BETWEEN 202501 AND 202506
         GROUP BY month_id, platform_id
     ) d USING (month_id, platform_id)
+
+    UNION ALL
+    SELECT 'DWS-09', 'DWS', 'Category recovery maps valid', 0,
+           COUNT(*), COUNT(*), CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'Only unique source-backed category ID and shop-history evidence is stored'
+    FROM dws_category_recovery_map_2026_gj
+    WHERE map_type NOT IN ('CATEGORY_ID', 'SHOP_HISTORY')
+       OR match_key IS NULL OR TRIM(match_key) = ''
+       OR resolved_category_name IS NULL OR TRIM(resolved_category_name) = ''
+       OR evidence_rows <= 0
+       OR first_month_id > last_month_id
+
+    UNION ALL
+    SELECT 'DWS-10', 'DWS', 'Category labels normalized', 0,
+           COUNT(*), COUNT(*), CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'No carriage return, line feed or tab remains in category labels'
+    FROM dws_category_month_summary_2026_gj
+    WHERE month_id BETWEEN 202601 AND 202606
+      AND (category_name LIKE CONCAT('%', CHAR(13), '%')
+        OR category_name LIKE CONCAT('%', CHAR(10), '%')
+        OR category_name LIKE CONCAT('%', CHAR(9), '%'))
+
+    UNION ALL
+    SELECT 'DWS-11', 'DWS', 'TOP10 excludes unclassified', 0,
+           COUNT(*), COUNT(*), CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'Unclassified remains in the base summary and denominator only'
+    FROM dws_category_month_top10_2026_gj
+    WHERE month_id BETWEEN 202601 AND 202606
+      AND category_name = '未分类'
+
+    UNION ALL
+    SELECT 'DWS-12', 'DWS', 'Unclassified sales match evidence result', 0,
+           SUM(ABS(COALESCE(a.unclassified_sales_rmb, 0) - e.expected_sales_rmb) > 0.01),
+           SUM(ABS(COALESCE(a.unclassified_sales_rmb, 0) - e.expected_sales_rmb) > 0.01),
+           CASE WHEN SUM(ABS(COALESCE(a.unclassified_sales_rmb, 0)
+                                  - e.expected_sales_rmb) > 0.01) = 0
+                THEN 'PASS' ELSE 'FAIL' END,
+           'Expected unresolved RMB: SMT 918166824.47, Amazon 168184777135.49, Alibaba 5118489515.25, Ozon 0'
+    FROM (
+        SELECT 1 AS platform_id, CAST(918166824.47 AS DECIMAL(38,2)) AS expected_sales_rmb
+        UNION ALL SELECT 2, 168184777135.49
+        UNION ALL SELECT 3, 5118489515.25
+        UNION ALL SELECT 4, 0
+    ) e
+    LEFT JOIN (
+        SELECT platform_id,
+               SUM(CASE WHEN category_name = '未分类'
+                        THEN total_sales_rmb ELSE 0 END) AS unclassified_sales_rmb
+        FROM dws_category_month_summary_2026_gj
+        WHERE month_id BETWEEN 202601 AND 202606
+        GROUP BY platform_id
+    ) a USING (platform_id)
+
+    UNION ALL
+    SELECT 'DWS-13', 'DWS', 'TOP10 percentage uses full sales denominator', 0,
+           COUNT(*), COUNT(*), CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'Removing unclassified from ranking does not inflate category percentages'
+    FROM dws_category_month_top10_2026_gj t
+    JOIN (
+        SELECT month_id, platform_id, SUM(total_sales_rmb) AS all_sales_rmb
+        FROM dws_category_month_summary_2026_gj
+        WHERE month_id BETWEEN 202601 AND 202606
+        GROUP BY month_id, platform_id
+    ) a USING (month_id, platform_id)
+    WHERE ABS(t.sales_pct
+              - ROUND(t.total_sales_rmb / NULLIF(a.all_sales_rmb, 0) * 100, 4)) > 0.0001
 
     UNION ALL
     SELECT 'DM-01', 'DM', 'Monthly business metric rows', 24, COUNT(*), COUNT(*) - 24,
@@ -425,3 +501,95 @@ FROM dwd_sales_detail_2026_gj
 WHERE month_id BETWEEN 202601 AND 202606
 GROUP BY month_id, platform_id, platform_name
 ORDER BY data_year, month_id, platform_id;
+
+-- Detail 6: category recovery coverage by platform.
+SELECT
+    platform_id,
+    MAX(platform_name) AS platform_name,
+    SUM(total_sales_rmb) AS total_sales_rmb,
+    SUM(CASE WHEN category_name <> '未分类' THEN total_sales_rmb ELSE 0 END)
+        AS classified_sales_rmb,
+    SUM(CASE WHEN category_name = '未分类' THEN total_sales_rmb ELSE 0 END)
+        AS unclassified_sales_rmb,
+    ROUND(
+        SUM(CASE WHEN category_name <> '未分类' THEN total_sales_rmb ELSE 0 END)
+        / NULLIF(SUM(total_sales_rmb), 0) * 100,
+        4
+    ) AS classified_pct,
+    ROUND(
+        SUM(CASE WHEN category_name = '未分类' THEN total_sales_rmb ELSE 0 END)
+        / NULLIF(SUM(total_sales_rmb), 0) * 100,
+        4
+    ) AS unclassified_pct
+FROM dws_category_month_summary_2026_gj
+WHERE month_id BETWEEN 202601 AND 202606
+GROUP BY platform_id
+ORDER BY platform_id;
+
+-- Detail 7: compact recovery-map evidence summary.
+SELECT map_type, platform_id,
+       COUNT(*) AS mapping_count,
+       SUM(evidence_rows) AS evidence_rows,
+       MIN(first_month_id) AS first_month_id,
+       MAX(last_month_id) AS last_month_id
+FROM dws_category_recovery_map_2026_gj
+GROUP BY map_type, platform_id
+ORDER BY map_type, platform_id;
+
+-- Detail 8: region recovery evidence. Every row must be high-confidence and
+-- must resolve to one result through the unique map key.
+SELECT map_type, platform_id,
+       COUNT(*) AS mapping_count,
+       SUM(evidence_rows) AS evidence_rows,
+       MIN(first_month_id) AS first_month_id,
+       MAX(last_month_id) AS last_month_id,
+       SUM(confidence_level <> 'HIGH' OR match_key_hash IS NULL) AS invalid_rows
+FROM dws_region_recovery_map_2026_gj
+GROUP BY map_type, platform_id
+ORDER BY map_type, platform_id;
+
+-- Detail 9: final region V2 must reconcile to DWD at all 24 month-platform
+-- groups. Existing DWD and the original region summary remain unchanged.
+WITH dwd AS (
+    SELECT month_id, platform_id,
+           SUM(sales_money) AS sales_money,
+           SUM(sales_num) AS sales_num,
+           COUNT(*) AS shop_count
+    FROM dwd_sales_detail_2026_gj
+    WHERE month_id BETWEEN 202601 AND 202606
+    GROUP BY month_id, platform_id
+),
+region_v2 AS (
+    SELECT month_id, platform_id,
+           SUM(total_sales_rmb) AS sales_money,
+           SUM(total_sales_num) AS sales_num,
+           SUM(shop_count) AS shop_count
+    FROM dws_region_month_summary_v2_final_2026_gj
+    WHERE region_level = '全国'
+    GROUP BY month_id, platform_id
+)
+SELECT d.month_id, d.platform_id,
+       ROUND(COALESCE(v.sales_money, 0) - COALESCE(d.sales_money, 0), 2)
+           AS money_difference,
+       ROUND(COALESCE(v.sales_num, 0) - COALESCE(d.sales_num, 0), 4)
+           AS num_difference,
+       v.shop_count - d.shop_count AS shop_difference,
+       CASE
+           WHEN ABS(COALESCE(v.sales_money, 0) - COALESCE(d.sales_money, 0)) <= 0.01
+            AND ABS(COALESCE(v.sales_num, 0) - COALESCE(d.sales_num, 0)) <= 0.0001
+            AND v.shop_count = d.shop_count
+           THEN 'PASS' ELSE 'FAIL'
+       END AS status
+FROM dwd d
+LEFT JOIN region_v2 v
+  ON v.month_id = d.month_id AND v.platform_id = d.platform_id
+ORDER BY d.month_id, d.platform_id;
+
+-- Detail 10: scope split used by the dashboard quality caption.
+SELECT region_scope, recovery_method,
+       SUM(source_shop_rows) AS source_shop_rows,
+       SUM(total_sales_rmb) AS total_sales_rmb
+FROM dws_region_month_summary_v2_final_2026_gj
+WHERE region_level = '全国'
+GROUP BY region_scope, recovery_method
+ORDER BY region_scope, recovery_method;

@@ -1,0 +1,6 @@
+platform_id,platform_name,total_sales_rmb,before_unclassified_rmb,before_unclassified_pct,after_unclassified_rmb,after_unclassified_pct,change_rmb,note
+1,SMT,89031440229.85,789790705.37,0.8871,918166824.47,1.0313,128376119.10,"Control-character labels were normalized; shops with no unique valid category evidence remain unclassified"
+2,Amazon,1439994638576.97,168269679549.43,11.6854,168184777135.49,11.6795,-84902413.94,"Recovered only through a category ID that maps to one valid category name"
+3,Alibaba,177684930650.25,52611586724.25,29.6095,5118489515.25,2.8807,-47493097209.00,"Recovered only when the same shop has one valid category across 2026H1"
+4,Ozon,226692490881.00,226692490881.00,100.0000,0.00,0.0000,-226692490881.00,"Recovered from source category_name_new; source coverage is 100 percent"
+ALL,All platforms,1933403500338.07,448363547860.05,23.1904,174221433475.21,9.0111,-274142114384.84,"Unresolved sales remain unclassified; no proportional allocation is used"

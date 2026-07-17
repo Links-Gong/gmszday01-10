@@ -1,0 +1,9 @@
+﻿check_id,layer,check_name,expected_value,actual_value,difference_value,status,checked_at,note
+REGION-01,DWS,Standard region code duplicates,0,0,0,PASS,2026-07-17T13:27:21,Standard hierarchy must be unique
+REGION-02,DWS,Invalid recovery map rows,0,0,0,PASS,2026-07-17T13:27:21,Only complete high-confidence evidence is retained
+REGION-03,DWS,Region V2 month-platform groups,24,24,0,PASS,2026-07-17T13:27:21,Six months times four platforms
+REGION-04,DWS,Region V2 DWD reconciliation failures,0,0,0,PASS,2026-07-17T13:27:21,"Money, quantity and shop counts"
+REGION-05,DWS,Recovery map types,5,5,0,PASS,2026-07-17T13:27:21,"Admin, country, shop, exact address and strict address parse"
+REGION-06,DWS,Located county sales improvement,614005360902.01,628328277329.00,14322916426.99,PASS,2026-07-17T13:27:21,Evidence-only recovery must improve coverage
+REGION-07,DWS,Amazon US protected as overseas,855062993640.85,855062993640.85,0.00,PASS,2026-07-17T13:27:21,US rows must never enter China region mapping
+REGION-08,Dashboard,County TOP15 unknown labels,0,0,0,PASS,2026-07-17T13:27:21,Ranking excludes unresolved and non-applicable regions

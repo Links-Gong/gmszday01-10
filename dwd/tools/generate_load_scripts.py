@@ -10,6 +10,7 @@ AUDIT_TABLE = "etl_load_audit_2026_gj"
 PROMOTE_PROCEDURE = "sp_promote_dwd_batch_2026_gj"
 DIM_STAGE_TABLE = "stg_dim_company_basic_2026_gj"
 PLACEHOLDERS = "('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE')"
+CATEGORY_PLACEHOLDERS = "('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE', '未分类')"
 NUMERIC_PATTERN = "^([0-9]+([.][0-9]+)?|[.][0-9]+)$"
 
 STAGE_COLUMNS = """(
@@ -52,6 +53,22 @@ def clean_text(expression: str, *, shop_id: bool = False) -> str:
     return (
         f"CASE WHEN {expression} IS NULL "
         f"OR UPPER({comparable}) IN {PLACEHOLDERS} "
+        f"THEN NULL ELSE {value} END"
+    )
+
+
+def clean_category(expression: str) -> str:
+    value = (
+        "TRIM(REGEXP_REPLACE("
+        "REPLACE(REPLACE(REPLACE(REPLACE("
+        f"CAST({expression} AS CHAR), "
+        "CHAR(13), ''), CHAR(10), ''), CHAR(9), ' '), "
+        "CONVERT(UNHEX('C2A0') USING utf8mb4), ' '), "
+        "'[[:space:]]+', ' '))"
+    )
+    return (
+        f"CASE WHEN {expression} IS NULL "
+        f"OR UPPER({value}) IN {CATEGORY_PLACEHOLDERS} "
         f"THEN NULL ELSE {value} END"
     )
 
@@ -219,7 +236,7 @@ WITH cleaned AS (
         {clean_numeric('s.sales_num')} AS sales_num_raw,
         {clean_numeric('s.sales_month')} AS sales_money_raw,
         COALESCE({clean_text('s.category_id_new')}, {clean_text('s.category_id')}) AS category_id,
-        COALESCE({clean_text('s.category_name_new')}, {clean_text('s.category_name')}) AS category_name
+        COALESCE({clean_category('s.category_name_new')}, {clean_category('s.category_name')}) AS category_name
     FROM ec_cross_border.{source} s
     WHERE {valid_shop_condition('s.shop_id')}
 ){typed_ctes()}
@@ -321,7 +338,7 @@ def amazon_sql(month: int) -> str:
         {clean_numeric('s.sales')} AS sales_num_raw,
         {clean_numeric('s.sales_money')} AS sales_money_raw,
         {clean_text('s.category_id_new')} AS category_id,
-        {clean_text('s.category_name_new')} AS category_name"""
+        {clean_category('s.category_name_new')} AS category_name"""
     return aggregated_platform_sql(
         month, 2, "Amazon", source, "amus", cleaned, "7.2"
     )
@@ -340,7 +357,7 @@ def alibaba_sql(month: int) -> str:
         {clean_numeric('s.sales')} AS sales_num_raw,
         {clean_numeric('s.sales_money')} AS sales_money_raw,
         COALESCE({clean_text('s.category_id_new')}, {clean_text('s.category_id')}) AS category_id,
-        COALESCE({clean_text('s.category_name_new')}, {clean_text('s.category_name')}) AS category_name"""
+        COALESCE({clean_category('s.category_name_new')}, {clean_category('s.category_name')}) AS category_name"""
     return aggregated_platform_sql(
         month, 3, "Alibaba", source, "algj", cleaned, "2.25"
     )
@@ -362,7 +379,8 @@ WITH cleaned AS (
         {clean_text('o.city')} AS city,
         {clean_text('o.county')} AS county,
         {clean_numeric('o.sales_num')} AS sales_num_raw,
-        {clean_numeric('o.sales_money')} AS sales_money_raw
+        {clean_numeric('o.sales_money')} AS sales_money_raw,
+        {clean_category('o.category_name_new')} AS category_name
     FROM ec_cross_border.{source} o
     WHERE {valid_shop_condition('o.shop_id')}
 ){typed_ctes()}, goods_deduplicated AS (
@@ -379,7 +397,8 @@ WITH cleaned AS (
                 COALESCE(city, '__NULL__'),
                 COALESCE(county, '__NULL__'),
                 COALESCE(sales_num_raw, '__NULL__'),
-                COALESCE(sales_money_raw, '__NULL__')), 256))
+                COALESCE(sales_money_raw, '__NULL__'),
+                COALESCE(category_name, '__NULL__')), 256))
         ) AS goods_key,
         MAX(shop_name) AS shop_name,
         MAX(company_name) AS company_name,
@@ -388,6 +407,7 @@ WITH cleaned AS (
         MAX(province) AS province,
         MAX(city) AS city,
         MAX(county) AS county,
+        MAX(category_name) AS category_name,
         MAX(sales_num_value) AS sales_num_value,
         MAX(sales_money_value) AS sales_money_value,
         MAX(invalid_sales_num_flag) AS invalid_sales_num_flag,
@@ -403,7 +423,8 @@ WITH cleaned AS (
                  COALESCE(city, '__NULL__'),
                  COALESCE(county, '__NULL__'),
                  COALESCE(sales_num_raw, '__NULL__'),
-                 COALESCE(sales_money_raw, '__NULL__')), 256)))
+                 COALESCE(sales_money_raw, '__NULL__'),
+                 COALESCE(category_name, '__NULL__')), 256)))
 ), aggregated AS (
     SELECT
         shop_id,
@@ -416,6 +437,20 @@ WITH cleaned AS (
         MAX(county) AS county,
         SUM(sales_num_value) AS sales_num,
         ROUND(SUM(sales_money_value), 2) AS sales_money,
+        NULLIF(
+            SUBSTRING_INDEX(
+                GROUP_CONCAT(
+                    COALESCE(category_name, '__NULL__')
+                    ORDER BY sales_money_value IS NULL,
+                             sales_money_value DESC,
+                             category_name,
+                             goods_key
+                    SEPARATOR '|#ROW#|'
+                ),
+                '|#ROW#|', 1
+            ),
+            '__NULL__'
+        ) AS category_name,
         COUNT(*) AS source_row_count,
         SUM(invalid_sales_num_flag) AS invalid_sales_num_count,
         SUM(invalid_sales_money_flag) AS invalid_sales_money_count
@@ -430,7 +465,7 @@ SELECT
     COALESCE(a.province, d.province),
     COALESCE(a.city, d.city),
     COALESCE(a.county, d.county),
-    a.sales_num, a.sales_money, 'RMB', NULL, NULL,
+    a.sales_num, a.sales_money, 'RMB', NULL, a.category_name,
     a.source_row_count, a.invalid_sales_num_count,
     a.invalid_sales_money_count,
     CASE WHEN d.shop_id IS NULL THEN 0 ELSE 1 END

@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS dws_category_month_summary_2026_gj (
     KEY idx_category_filter (month_id, platform_id, category_name(100))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS dws_category_recovery_map_2026_gj (
+    map_type               VARCHAR(20) NOT NULL,
+    platform_id            TINYINT NOT NULL,
+    match_key              VARCHAR(255) NOT NULL,
+    resolved_category_name VARCHAR(255) NOT NULL,
+    evidence_rows          BIGINT NOT NULL,
+    first_month_id         INT NOT NULL,
+    last_month_id          INT NOT NULL,
+    created_time           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (map_type, platform_id, match_key),
+    KEY idx_recovery_lookup (platform_id, map_type, match_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS dws_category_month_top10_2026_gj (
     id                  BIGINT NOT NULL AUTO_INCREMENT,
     month_id            INT NOT NULL,
@@ -68,4 +81,3 @@ CREATE TABLE IF NOT EXISTS dws_category_month_top10_2026_gj (
     PRIMARY KEY (id),
     KEY idx_category_rank (month_id, platform_id, category_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-

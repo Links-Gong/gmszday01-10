@@ -12,3 +12,8 @@ DASH-10,DASHBOARD,Month range filter reruns dashboard,"(202602, 202606)","(20260
 DASH-11,DASHBOARD,Province and city filters are linked,"['全部城市', '上海市', '崇明市', '浦东新区']","['全部城市', '上海市', '崇明市', '浦东新区']",0,PASS,2026-07-15T15:54:56+08:00,
 DASH-12,DASHBOARD,Canonical city selection reruns dashboard,上海市,上海市,0,PASS,2026-07-15T15:54:56+08:00,
 DASH-13,DASHBOARD,Desktop browser runtime and horizontal overflow,0,0,0,PASS,2026-07-15T15:54:56+08:00,Playwright baseline passed; post-fix component tests passed and changes do not widen layout
+DASH-14,DASHBOARD,Category chart title excludes unclassified,1,1,0,PASS,2026-07-16T17:17:45+08:00,Plotly title is 类目销售额 TOP10（不含未分类）
+DASH-15,DASHBOARD,Category quality indicators render,3,3,0,PASS,2026-07-16T17:17:45+08:00,Classified share; unclassified RMB; unclassified share
+DASH-16,DASHBOARD,Ozon filter updates category quality,0.00%,0.00%,0,PASS,2026-07-16T17:17:45+08:00,Fresh AppTest run returned 100.00% classified and no exceptions
+DASH-17,DASHBOARD,Category TOP10 contains no unclassified label,0,0,0,PASS,2026-07-16T17:17:45+08:00,Checked rendered Plotly category labels under Ozon filter
+REGION-08,DASHBOARD,County TOP15 unknown labels,0,0,0,PASS,2026-07-17T13:27:21,Ranking excludes unresolved and non-applicable regions

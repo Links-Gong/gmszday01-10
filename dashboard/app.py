@@ -154,6 +154,10 @@ INVALID_REGION_VALUES = {
     "全部城市",
     "全省小计",
     "未知城市",
+    "全部区县",
+    "全市小计",
+    "未知区县",
+    "不适用",
 }
 
 
@@ -184,7 +188,7 @@ DWS_PLATFORM_TABLE = quote_table(
     secret("DWS_PLATFORM_TABLE", "dws_platform_month_summary_2026_gj")
 )
 DWS_REGION_TABLE = quote_table(
-    secret("DWS_REGION_TABLE", "dws_region_month_summary_2026_gj")
+    secret("DWS_REGION_TABLE", "dws_region_month_summary_v2_final_2026_gj")
 )
 DWS_CATEGORY_TABLE = quote_table(
     secret("DWS_CATEGORY_TABLE", "dws_category_month_summary_2026_gj")
@@ -405,6 +409,8 @@ province_values = query_data(
     FROM {DWS_REGION_TABLE}
     WHERE month_id BETWEEN :start_month AND :end_month
       AND region_level = '省级'
+      AND region_scope = 'DOMESTIC'
+      AND province <> '未知省份'
       {platform_filter}
     ORDER BY province
     """,
@@ -433,6 +439,8 @@ city_values = query_data(
     FROM {DWS_REGION_TABLE}
     WHERE month_id BETWEEN :start_month AND :end_month
       AND region_level = '市级'
+      AND region_scope = 'DOMESTIC'
+      AND city <> '未知城市'
       {platform_filter}
       {province_filter}
     ORDER BY city
@@ -580,6 +588,7 @@ category = query_data(
     SELECT category_name, SUM(total_sales_rmb) AS total_sales_rmb
     FROM {DWS_CATEGORY_TABLE}
     WHERE month_id BETWEEN :start_month AND :end_month
+      AND category_name <> '未分类'
       {platform_filter}
     GROUP BY category_name
     HAVING SUM(total_sales_rmb) IS NOT NULL
@@ -588,6 +597,33 @@ category = query_data(
     """,
     base_params,
 )
+
+category_quality = query_data(
+    f"""
+    SELECT
+        SUM(total_sales_rmb) AS total_sales_rmb,
+        SUM(CASE WHEN category_name = '未分类'
+                 THEN total_sales_rmb ELSE 0 END) AS unclassified_sales_rmb
+    FROM {DWS_CATEGORY_TABLE}
+    WHERE month_id BETWEEN :start_month AND :end_month
+      {platform_filter}
+    """,
+    base_params,
+)
+
+category_total = 0.0
+category_unclassified = 0.0
+if not category_quality.empty:
+    total_value = category_quality.iloc[0]["total_sales_rmb"]
+    unclassified_value = category_quality.iloc[0]["unclassified_sales_rmb"]
+    category_total = 0.0 if pd.isna(total_value) else float(total_value)
+    category_unclassified = (
+        0.0 if pd.isna(unclassified_value) else float(unclassified_value)
+    )
+category_unclassified_pct = (
+    category_unclassified / category_total * 100 if category_total else 0.0
+)
+category_classified_pct = 100.0 - category_unclassified_pct if category_total else 0.0
 
 left, right = st.columns(2)
 with left:
@@ -605,6 +641,11 @@ with left:
         st.plotly_chart(style_chart(mix_figure), width="stretch")
 
 with right:
+    st.caption(
+        f"已分类销售额占比 {category_classified_pct:.2f}% · "
+        f"未分类销售额 {format_money(category_unclassified)} · "
+        f"未分类占比 {category_unclassified_pct:.2f}%"
+    )
     if category.empty:
         st.info("所选范围没有有效类目销售额。")
     else:
@@ -613,7 +654,7 @@ with right:
             x="total_sales_rmb",
             y="category_name",
             orientation="h",
-            title="类目销售额 TOP10",
+            title="类目销售额 TOP10（不含未分类）",
             labels={"total_sales_rmb": "销售额（元）", "category_name": "类目"},
             color_discrete_sequence=["#175cd3"],
         )
@@ -627,6 +668,10 @@ county = query_data(
     FROM {DWS_REGION_TABLE}
     WHERE month_id BETWEEN :start_month AND :end_month
       AND region_level = '区县级'
+      AND region_scope = 'DOMESTIC'
+      AND province <> '未知省份'
+      AND city <> '未知城市'
+      AND county NOT IN ('未知区县', '不适用')
       {platform_filter}
       {province_filter}
       {city_filter}
@@ -645,6 +690,47 @@ if not county.empty:
         .agg(total_sales_rmb=("total_sales_rmb", "sum"), shop_count=("shop_count", "sum"))
     )
     county["region"] = county[["province", "city", "county"]].agg(" / ".join, axis=1)
+
+region_quality = query_data(
+    f"""
+    SELECT
+        SUM(total_sales_rmb) AS total_sales_rmb,
+        SUM(CASE
+            WHEN region_scope = 'DOMESTIC'
+             AND province <> '未知省份'
+             AND city <> '未知城市'
+             AND county NOT IN ('未知区县', '不适用')
+            THEN total_sales_rmb ELSE 0 END) AS domestic_located_rmb,
+        SUM(CASE
+            WHEN region_scope = 'DOMESTIC'
+             AND (province = '未知省份' OR city = '未知城市'
+                  OR county IN ('未知区县', '不适用'))
+            THEN total_sales_rmb ELSE 0 END) AS domestic_pending_rmb,
+        SUM(CASE WHEN region_scope IN ('OVERSEAS', 'SPECIAL_REGION')
+                 THEN total_sales_rmb ELSE 0 END) AS overseas_rmb,
+        SUM(CASE WHEN region_scope = 'UNKNOWN_SCOPE'
+                 THEN total_sales_rmb ELSE 0 END) AS unknown_scope_rmb
+    FROM {DWS_REGION_TABLE}
+    WHERE month_id BETWEEN :start_month AND :end_month
+      AND region_level = '区县级'
+      {platform_filter}
+    """,
+    base_params,
+).iloc[0]
+
+region_total = float(region_quality["total_sales_rmb"] or 0)
+
+
+def region_quality_text(column: str) -> tuple[str, float]:
+    value = float(region_quality[column] or 0)
+    percentage = value / region_total * 100 if region_total else 0.0
+    return format_money(value), percentage
+
+
+domestic_located, domestic_located_pct = region_quality_text("domestic_located_rmb")
+domestic_pending, domestic_pending_pct = region_quality_text("domestic_pending_rmb")
+overseas_sales, overseas_pct = region_quality_text("overseas_rmb")
+unknown_scope, unknown_scope_pct = region_quality_text("unknown_scope_rmb")
 
 enterprise_params = dict(base_params)
 enterprise_params["end_month_only"] = int(end_month)
@@ -669,6 +755,12 @@ enterprise = query_data(
 
 left, right = st.columns([1, 1.15])
 with left:
+    st.caption(
+        f"中国大陆已定位 {domestic_located}（{domestic_located_pct:.1f}%） · "
+        f"大陆待识别 {domestic_pending}（{domestic_pending_pct:.1f}%）  \n"
+        f"境外/地区不适用 {overseas_sales}（{overseas_pct:.1f}%） · "
+        f"范围未知 {unknown_scope}（{unknown_scope_pct:.1f}%）"
+    )
     if county.empty:
         st.info("所选区域没有有效区县销售额。")
     else:
@@ -677,7 +769,7 @@ with left:
             x="total_sales_rmb",
             y="region",
             orientation="h",
-            title="区县销售额 TOP15",
+            title="中国大陆区县销售额 TOP15",
             labels={"total_sales_rmb": "销售额（元）", "region": "区县"},
             color_discrete_sequence=["#027a48"],
         )
@@ -759,6 +851,7 @@ province_map = query_data(
     FROM {DWS_REGION_TABLE}
     WHERE month_id BETWEEN :start_month AND :end_month
       AND region_level = :map_level
+      AND region_scope = 'DOMESTIC'
       {platform_filter}
       {province_filter}
       {city_filter}

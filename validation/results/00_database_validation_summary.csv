@@ -1,22 +1,35 @@
 ﻿check_id,layer,check_name,expected_value,actual_value,difference_value,status,checked_at,note
-DM-01,DM,Monthly business metric rows,24.0000,24.0000,0.0000,PASS,2026-07-15 06:14:28,Six months times four platforms
-DM-02,DM,Express formulas valid,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,Revenue=retail*15%; volume=sales number*53%
-DM-03,DM,Year-over-year metrics calculated,24.0000,24.0000,0.0000,PASS,2026-07-15 06:14:28,Each 2026 month is joined to the same 2025 month
-DM-04,DM,Manual YoY: 202601 SMT,-15.4042,-15.4042,0.0000,PASS,2026-07-15 06:14:28,Recomputed from 7457153513.54 and 8815040918.60
-DM-05,DM,Enterprise rank contains data,1.0000,1.0000,0.0000,PASS,2026-07-15 06:14:28,Actual enterprise rank rows: 12049859
-DM-06,DM,Enterprise rank grain is unique,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,No duplicate month_id + platform_id + company_name groups
-DWD-01,DWD,2025 load batches succeeded,24.0000,24.0000,0.0000,PASS,2026-07-15 06:14:28,All 202501-202506 platform batches must be committed
-DWD-02,DWD,2026 load batches succeeded,24.0000,24.0000,0.0000,PASS,2026-07-15 06:14:28,All 202601-202606 platform batches must be committed
-DWD-03,DWD,2025 DWD rows equal audited target,13205307.0000,13205307.0000,0.0000,PASS,2026-07-15 06:14:28,Target rows equal cleaned valid shop-month rows
-DWD-04,DWD,2026 DWD rows equal audited target,13460906.0000,13460906.0000,0.0000,PASS,2026-07-15 06:14:28,Target rows equal cleaned valid shop-month rows
-DWD-05,DWD,DWD month-platform groups,48.0000,48.0000,0.0000,PASS,2026-07-15 06:14:28,Six months times four platforms for each year
-DWD-06,DWD,Formal DWD empty shop IDs,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,Empty shop IDs remain only in audit statistics
-DWD-07,DWD,DWD shop-month uniqueness,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,No duplicate month_id + platform_id + shop_id keys in either year
-DWS-01,DWS,2025 platform-month rows,24.0000,24.0000,0.0000,PASS,2026-07-15 06:14:28,Baseline summary has six months and four platforms
-DWS-02,DWS,2026 platform-month rows,24.0000,24.0000,0.0000,PASS,2026-07-15 06:14:28,Business summary has six months and four platforms
-DWS-03,DWS,2026 platform totals reconcile to DWD,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,"Money, volume and shop count are checked per platform-month"
-DWS-04,DWS,National region totals reconcile,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,Only region_level=National is compared with platform totals
-DWS-05,DWS,Category totals reconcile,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,Unclassified rows are retained in the category base summary
-DWS-06,DWS,January month-over-month baseline is NULL,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,202601 has no previous month inside the 2026 result set
-DWS-07,DWS,Category TOP10 ranks valid,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,Each platform-month rank is between 1 and 10 and not duplicated
-DWS-08,DWS,2025 platform totals reconcile to DWD,0.0000,0.0000,0.0000,PASS,2026-07-15 06:14:28,"Baseline money, volume and shop count are checked per platform-month"
+DM-01,DM,Monthly business metric rows,24.0000,24.0000,0.0000,PASS,2026-07-16 09:09:02,Six months times four platforms
+DM-02,DM,Express formulas valid,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Revenue=retail*15%; volume=sales number*53%
+DM-03,DM,Year-over-year metrics calculated,24.0000,24.0000,0.0000,PASS,2026-07-16 09:09:02,Each 2026 month is joined to the same 2025 month
+DM-04,DM,Manual YoY: 202601 SMT,-15.4042,-15.4042,0.0000,PASS,2026-07-16 09:09:02,Recomputed from 7457153513.54 and 8815040918.60
+DM-05,DM,Enterprise rank contains data,1.0000,1.0000,0.0000,PASS,2026-07-16 09:09:02,Actual enterprise rank rows: 12049859
+DM-06,DM,Enterprise rank grain is unique,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,No duplicate month_id + platform_id + company_name groups
+DWD-01,DWD,2025 load batches succeeded,24.0000,24.0000,0.0000,PASS,2026-07-16 09:09:02,All 202501-202506 platform batches must be committed
+DWD-02,DWD,2026 load batches succeeded,24.0000,24.0000,0.0000,PASS,2026-07-16 09:09:02,All 202601-202606 platform batches must be committed
+DWD-03,DWD,2025 DWD rows equal audited target,13205307.0000,13205307.0000,0.0000,PASS,2026-07-16 09:09:02,Target rows equal cleaned valid shop-month rows
+DWD-04,DWD,2026 DWD rows equal audited target,13460906.0000,13460906.0000,0.0000,PASS,2026-07-16 09:09:02,Target rows equal cleaned valid shop-month rows
+DWD-05,DWD,DWD month-platform groups,48.0000,48.0000,0.0000,PASS,2026-07-16 09:09:02,Six months times four platforms for each year
+DWD-06,DWD,Formal DWD empty shop IDs,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Empty shop IDs remain only in audit statistics
+DWD-07,DWD,DWD shop-month uniqueness,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,No duplicate month_id + platform_id + shop_id keys in either year
+DWD-08,DWD,Ozon observed categories populated,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Ozon category_name comes from source category_name_new
+DWS-01,DWS,2025 platform-month rows,24.0000,24.0000,0.0000,PASS,2026-07-16 09:09:02,Baseline summary has six months and four platforms
+DWS-02,DWS,2026 platform-month rows,24.0000,24.0000,0.0000,PASS,2026-07-16 09:09:02,Business summary has six months and four platforms
+DWS-03,DWS,2026 platform totals reconcile to DWD,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,"Money, volume and shop count are checked per platform-month"
+DWS-04,DWS,National region totals reconcile,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Only region_level=National is compared with platform totals
+DWS-05,DWS,Category totals reconcile,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Unclassified rows are retained in the category base summary
+DWS-06,DWS,January month-over-month baseline is NULL,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,202601 has no previous month inside the 2026 result set
+DWS-07,DWS,Category TOP10 ranks valid,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Each platform-month rank is between 1 and 10 and not duplicated
+DWS-08,DWS,2025 platform totals reconcile to DWD,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,"Baseline money, volume and shop count are checked per platform-month"
+DWS-09,DWS,Category recovery maps valid,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Only unique source-backed category ID and shop-history evidence is stored
+DWS-10,DWS,Category labels normalized,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,"No carriage return, line feed or tab remains in category labels"
+DWS-11,DWS,TOP10 excludes unclassified,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Unclassified remains in the base summary and denominator only
+DWS-12,DWS,Unclassified sales match evidence result,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,"Expected unresolved RMB: SMT 918166824.47, Amazon 168184777135.49, Alibaba 5118489515.25, Ozon 0"
+DWS-13,DWS,TOP10 percentage uses full sales denominator,0.0000,0.0000,0.0000,PASS,2026-07-16 09:09:02,Removing unclassified from ranking does not inflate category percentages
+REGION-01,DWS,Standard region code duplicates,0,0,0,PASS,2026-07-17T13:27:21,Standard hierarchy must be unique
+REGION-02,DWS,Invalid recovery map rows,0,0,0,PASS,2026-07-17T13:27:21,Only complete high-confidence evidence is retained
+REGION-03,DWS,Region V2 month-platform groups,24,24,0,PASS,2026-07-17T13:27:21,Six months times four platforms
+REGION-04,DWS,Region V2 DWD reconciliation failures,0,0,0,PASS,2026-07-17T13:27:21,"Money, quantity and shop counts"
+REGION-05,DWS,Recovery map types,5,5,0,PASS,2026-07-17T13:27:21,"Admin, country, shop, exact address and strict address parse"
+REGION-06,DWS,Located county sales improvement,614005360902.01,628328277329.00,14322916426.99,PASS,2026-07-17T13:27:21,Evidence-only recovery must improve coverage
+REGION-07,DWS,Amazon US protected as overseas,855062993640.85,855062993640.85,0.00,PASS,2026-07-17T13:27:21,US rows must never enter China region mapping

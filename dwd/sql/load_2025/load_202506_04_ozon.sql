@@ -62,7 +62,8 @@ WITH cleaned AS (
         CASE WHEN o.city IS NULL OR UPPER(TRIM(CAST(o.city AS CHAR))) IN ('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE') THEN NULL ELSE TRIM(CAST(o.city AS CHAR)) END AS city,
         CASE WHEN o.county IS NULL OR UPPER(TRIM(CAST(o.county AS CHAR))) IN ('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE') THEN NULL ELSE TRIM(CAST(o.county AS CHAR)) END AS county,
         CASE WHEN o.sales_num IS NULL OR UPPER(TRIM(CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.sales_num AS BINARY), UNHEX('EFBFA5'), UNHEX('')), UNHEX('EFBF84'), UNHEX('')), UNHEX('EFBC8C'), UNHEX('')), UNHEX('C2A5'), UNHEX('')), UNHEX('C2A0'), UNHEX('')), UNHEX('A5'), UNHEX('')), UNHEX('A0'), UNHEX('')) USING latin1))) IN ('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE') THEN NULL ELSE TRIM(CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.sales_num AS BINARY), UNHEX('EFBFA5'), UNHEX('')), UNHEX('EFBF84'), UNHEX('')), UNHEX('EFBC8C'), UNHEX('')), UNHEX('C2A5'), UNHEX('')), UNHEX('C2A0'), UNHEX('')), UNHEX('A5'), UNHEX('')), UNHEX('A0'), UNHEX('')) USING latin1)) END AS sales_num_raw,
-        CASE WHEN o.sales_money IS NULL OR UPPER(TRIM(CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.sales_money AS BINARY), UNHEX('EFBFA5'), UNHEX('')), UNHEX('EFBF84'), UNHEX('')), UNHEX('EFBC8C'), UNHEX('')), UNHEX('C2A5'), UNHEX('')), UNHEX('C2A0'), UNHEX('')), UNHEX('A5'), UNHEX('')), UNHEX('A0'), UNHEX('')) USING latin1))) IN ('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE') THEN NULL ELSE TRIM(CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.sales_money AS BINARY), UNHEX('EFBFA5'), UNHEX('')), UNHEX('EFBF84'), UNHEX('')), UNHEX('EFBC8C'), UNHEX('')), UNHEX('C2A5'), UNHEX('')), UNHEX('C2A0'), UNHEX('')), UNHEX('A5'), UNHEX('')), UNHEX('A0'), UNHEX('')) USING latin1)) END AS sales_money_raw
+        CASE WHEN o.sales_money IS NULL OR UPPER(TRIM(CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.sales_money AS BINARY), UNHEX('EFBFA5'), UNHEX('')), UNHEX('EFBF84'), UNHEX('')), UNHEX('EFBC8C'), UNHEX('')), UNHEX('C2A5'), UNHEX('')), UNHEX('C2A0'), UNHEX('')), UNHEX('A5'), UNHEX('')), UNHEX('A0'), UNHEX('')) USING latin1))) IN ('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE') THEN NULL ELSE TRIM(CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.sales_money AS BINARY), UNHEX('EFBFA5'), UNHEX('')), UNHEX('EFBF84'), UNHEX('')), UNHEX('EFBC8C'), UNHEX('')), UNHEX('C2A5'), UNHEX('')), UNHEX('C2A0'), UNHEX('')), UNHEX('A5'), UNHEX('')), UNHEX('A0'), UNHEX('')) USING latin1)) END AS sales_money_raw,
+        CASE WHEN o.category_name_new IS NULL OR UPPER(TRIM(REGEXP_REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.category_name_new AS CHAR), CHAR(13), ''), CHAR(10), ''), CHAR(9), ' '), CONVERT(UNHEX('C2A0') USING utf8mb4), ' '), '[[:space:]]+', ' '))) IN ('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE', '未分类') THEN NULL ELSE TRIM(REGEXP_REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(CAST(o.category_name_new AS CHAR), CHAR(13), ''), CHAR(10), ''), CHAR(9), ' '), CONVERT(UNHEX('C2A0') USING utf8mb4), ' '), '[[:space:]]+', ' ')) END AS category_name
     FROM ec_cross_border.ozon_shopinfo_202506_cn o
     WHERE o.shop_id IS NOT NULL AND UPPER(TRIM(CONVERT(REPLACE(REPLACE(CAST(o.shop_id AS BINARY), UNHEX('C2A0'), UNHEX('')), UNHEX('A0'), UNHEX('')) USING utf8mb4))) NOT IN ('', '-', '--', 'NULL', 'N/A', 'NA', 'NAN', 'NONE')
 ), normalized AS (
@@ -97,7 +98,8 @@ WITH cleaned AS (
                 COALESCE(city, '__NULL__'),
                 COALESCE(county, '__NULL__'),
                 COALESCE(sales_num_raw, '__NULL__'),
-                COALESCE(sales_money_raw, '__NULL__')), 256))
+                COALESCE(sales_money_raw, '__NULL__'),
+                COALESCE(category_name, '__NULL__')), 256))
         ) AS goods_key,
         MAX(shop_name) AS shop_name,
         MAX(company_name) AS company_name,
@@ -106,6 +108,7 @@ WITH cleaned AS (
         MAX(province) AS province,
         MAX(city) AS city,
         MAX(county) AS county,
+        MAX(category_name) AS category_name,
         MAX(sales_num_value) AS sales_num_value,
         MAX(sales_money_value) AS sales_money_value,
         MAX(invalid_sales_num_flag) AS invalid_sales_num_flag,
@@ -121,7 +124,8 @@ WITH cleaned AS (
                  COALESCE(city, '__NULL__'),
                  COALESCE(county, '__NULL__'),
                  COALESCE(sales_num_raw, '__NULL__'),
-                 COALESCE(sales_money_raw, '__NULL__')), 256)))
+                 COALESCE(sales_money_raw, '__NULL__'),
+                 COALESCE(category_name, '__NULL__')), 256)))
 ), aggregated AS (
     SELECT
         shop_id,
@@ -134,6 +138,20 @@ WITH cleaned AS (
         MAX(county) AS county,
         SUM(sales_num_value) AS sales_num,
         ROUND(SUM(sales_money_value), 2) AS sales_money,
+        NULLIF(
+            SUBSTRING_INDEX(
+                GROUP_CONCAT(
+                    COALESCE(category_name, '__NULL__')
+                    ORDER BY sales_money_value IS NULL,
+                             sales_money_value DESC,
+                             category_name,
+                             goods_key
+                    SEPARATOR '|#ROW#|'
+                ),
+                '|#ROW#|', 1
+            ),
+            '__NULL__'
+        ) AS category_name,
         COUNT(*) AS source_row_count,
         SUM(invalid_sales_num_flag) AS invalid_sales_num_count,
         SUM(invalid_sales_money_flag) AS invalid_sales_money_count
@@ -148,7 +166,7 @@ SELECT
     COALESCE(a.province, d.province),
     COALESCE(a.city, d.city),
     COALESCE(a.county, d.county),
-    a.sales_num, a.sales_money, 'RMB', NULL, NULL,
+    a.sales_num, a.sales_money, 'RMB', NULL, a.category_name,
     a.source_row_count, a.invalid_sales_num_count,
     a.invalid_sales_money_count,
     CASE WHEN d.shop_id IS NULL THEN 0 ELSE 1 END
