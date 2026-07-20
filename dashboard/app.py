@@ -377,10 +377,10 @@ platforms = sorted(
 
 with st.sidebar:
     st.subheader("筛选条件")
-    selected_months = st.select_slider(
-        "月份范围",
+    selected_month = st.select_slider(
+        "月份",
         options=months,
-        value=(months[0], months[-1]),
+        value=months[-1],
         format_func=month_label,
     )
     selected_platforms = st.multiselect(
@@ -394,7 +394,7 @@ if not selected_platforms:
     st.warning("至少选择一个平台。")
     st.stop()
 
-start_month, end_month = selected_months
+start_month = end_month = selected_month
 base_params: dict[str, Any] = {
     "start_month": int(start_month),
     "end_month": int(end_month),
@@ -483,6 +483,9 @@ summary = query_data(
     summary_params,
 ).iloc[0]
 
+trend_params = dict(base_params)
+trend_params["start_month"] = months[0]
+trend_params["end_month"] = months[-1]
 trend = query_data(
     f"""
     SELECT month_id,
@@ -496,7 +499,7 @@ trend = query_data(
     GROUP BY month_id
     ORDER BY month_id
     """,
-    base_params,
+    trend_params,
 )
 trend["month"] = trend["month_id"].map(month_label)
 
@@ -523,9 +526,7 @@ k3.metric("快递收入估算", format_money(summary["express_revenue_rmb"]))
 k4.metric("快递量估算", format_count(summary["express_volume"]))
 k5.metric("活跃平台店铺", format_count(summary["shop_count"]))
 
-if summary["shop_count"] and summary["valid_money_rows"] < summary["shop_count"]:
-    coverage = float(summary["valid_money_rows"]) / float(summary["shop_count"]) * 100
-    st.warning(f"所选月份销售额有效店铺覆盖率为 {coverage:.1f}%，缺失金额没有按 0 计算。")
+
 
 left, right = st.columns(2)
 with left:
